@@ -19,6 +19,7 @@ const ExcelSpreadsheet = () => {
   const [clipboardData, setClipboardData] = useState(null);
   const [filteredData, setFilteredData] = useState(null);
   const [highlightedRows, setHighlightedRows] = useState(new Set());
+  const [lastClickTarget, setLastClickTarget] = useState(null); // Track what was clicked
   
   // Use refs to store current values without causing re-renders
   const spreadsheetRef = useRef(null);
@@ -100,13 +101,43 @@ const ExcelSpreadsheet = () => {
       const currentData = dataRef.current;
       let textData = [];
       
+      console.log('Button copy - Selection state:', selectedCells);
+      console.log('Button copy - Last click target:', lastClickTarget);
+      
       // If there are selected cells, copy only those
-      if (selectedCells && selectedCells.length > 0) {
-        // Find the bounding box of selected cells
-        const minRow = Math.min(...selectedCells.map(cell => cell.row));
-        const maxRow = Math.max(...selectedCells.map(cell => cell.row));
-        const minCol = Math.min(...selectedCells.map(cell => cell.col));
-        const maxCol = Math.max(...selectedCells.map(cell => cell.col));
+      if (selectedCells && (selectedCells.length > 0 || (selectedCells.start !== undefined && selectedCells.end !== undefined))) {
+        let minRow, maxRow, minCol, maxCol;
+        
+        // Handle different selection formats using click tracking
+        if (selectedCells.start !== undefined && selectedCells.end !== undefined) {
+          if (lastClickTarget?.type === 'column') {
+            // Column selection - copy entire column
+            const colIndex = columnLabels.indexOf(lastClickTarget.value);
+            minRow = 0;
+            maxRow = currentData.length - 1;
+            minCol = colIndex;
+            maxCol = colIndex;
+            console.log(`Button copy - Column selection: column ${lastClickTarget.value} (index ${colIndex}), all rows`);
+          } else {
+            // Row selection (default)
+            minRow = Math.min(selectedCells.start, selectedCells.end);
+            maxRow = Math.max(selectedCells.start, selectedCells.end);
+            minCol = 0;
+            maxCol = currentData[0]?.length - 1 || 14;
+            console.log(`Button copy - Row selection: rows ${minRow + 1}-${maxRow + 1}, all columns`);
+          }
+        } else if (Array.isArray(selectedCells) && selectedCells.length > 0) {
+          // Handle cell array format [{ row: 0, col: 1 }, ...]
+          minRow = Math.min(...selectedCells.map(cell => cell.row));
+          maxRow = Math.max(...selectedCells.map(cell => cell.row));
+          minCol = Math.min(...selectedCells.map(cell => cell.col));
+          maxCol = Math.max(...selectedCells.map(cell => cell.col));
+          console.log(`Button copy - Cell selection: rows ${minRow + 1}-${maxRow + 1}, columns ${minCol + 1}-${maxCol + 1}`);
+        } else {
+          console.log('Button copy - Unknown selection format, not copying');
+          alert('Please select some cells first before copying.');
+          return;
+        }
         
         // Copy the rectangular region
         for (let row = minRow; row <= maxRow; row++) {
@@ -121,18 +152,9 @@ const ExcelSpreadsheet = () => {
           textData.push(rowData.join('\t'));
         }
       } else {
-        // If no selection, copy all data
-        for (let row = 0; row < currentData.length; row++) {
-          const rowData = [];
-          for (let col = 0; col < currentData[row].length; col++) {
-            const cellValue = currentData[row][col]?.value || '';
-            const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
-              ? `"${cellValue.replace(/"/g, '""')}"` 
-              : cellValue;
-            rowData.push(escapedValue);
-          }
-          textData.push(rowData.join('\t'));
-        }
+        console.log('Button copy - No cells selected, not copying anything');
+        alert('Please select some cells first before copying.');
+        return;
       }
       
       const clipboardText = textData.join('\n');
@@ -153,7 +175,7 @@ const ExcelSpreadsheet = () => {
       }
       
       setClipboardData(clipboardText);
-      console.log('Selected data copied to clipboard');
+      console.log('Button copy - Selected data copied to clipboard');
       
       const copyButton = document.querySelector('#copy-all-btn');
       if (copyButton) {
@@ -169,7 +191,7 @@ const ExcelSpreadsheet = () => {
       console.error('Failed to copy data:', error);
       alert('Failed to copy data to clipboard. Please try selecting the data manually and using Ctrl+C.');
     }
-  }, [selectedCells]);
+  }, [selectedCells, lastClickTarget]);
 
   // Keyboard shortcuts - using refs to avoid re-renders
   useEffect(() => {
@@ -197,8 +219,8 @@ const ExcelSpreadsheet = () => {
           }
         } else if (event.key === 'c') {
           event.preventDefault();
-          // Copy all data using refs
-          copyAllDataToClipboard();
+          // Copy selected data using refs - respects selection
+          copySelectedDataToClipboard();
         }
       }
     };
@@ -267,18 +289,47 @@ const ExcelSpreadsheet = () => {
     };
 
     // Helper function to copy selected data
-    const copyAllDataToClipboard = async () => {
+    const copySelectedDataToClipboard = async () => {
       try {
         const currentData = dataRef.current;
         let textData = [];
         
+        console.log('Selection state:', selectedCells);
+        console.log('Ctrl+C - Last click target:', lastClickTarget);
+        
         // If there are selected cells, copy only those
-        if (selectedCells && selectedCells.length > 0) {
-          // Find the bounding box of selected cells
-          const minRow = Math.min(...selectedCells.map(cell => cell.row));
-          const maxRow = Math.max(...selectedCells.map(cell => cell.row));
-          const minCol = Math.min(...selectedCells.map(cell => cell.col));
-          const maxCol = Math.max(...selectedCells.map(cell => cell.col));
+        if (selectedCells && (selectedCells.length > 0 || (selectedCells.start !== undefined && selectedCells.end !== undefined))) {
+          let minRow, maxRow, minCol, maxCol;
+          
+          // Handle different selection formats using click tracking
+          if (selectedCells.start !== undefined && selectedCells.end !== undefined) {
+            if (lastClickTarget?.type === 'column') {
+              // Column selection - copy entire column
+              const colIndex = columnLabels.indexOf(lastClickTarget.value);
+              minRow = 0;
+              maxRow = currentData.length - 1;
+              minCol = colIndex;
+              maxCol = colIndex;
+              console.log(`Ctrl+C - Column selection: column ${lastClickTarget.value} (index ${colIndex}), all rows`);
+            } else {
+              // Row selection (default)
+              minRow = Math.min(selectedCells.start, selectedCells.end);
+              maxRow = Math.max(selectedCells.start, selectedCells.end);
+              minCol = 0;
+              maxCol = currentData[0]?.length - 1 || 14;
+              console.log(`Ctrl+C - Row selection: rows ${minRow + 1}-${maxRow + 1}, all columns`);
+            }
+          } else if (Array.isArray(selectedCells) && selectedCells.length > 0) {
+            // Handle cell array format [{ row: 0, col: 1 }, ...]
+            minRow = Math.min(...selectedCells.map(cell => cell.row));
+            maxRow = Math.max(...selectedCells.map(cell => cell.row));
+            minCol = Math.min(...selectedCells.map(cell => cell.col));
+            maxCol = Math.max(...selectedCells.map(cell => cell.col));
+            console.log(`Ctrl+C - Cell selection: rows ${minRow + 1}-${maxRow + 1}, columns ${minCol + 1}-${maxCol + 1}`);
+          } else {
+            console.log('Ctrl+C - Unknown selection format - NOT copying anything');
+            return;
+          }
           
           // Copy the rectangular region
           for (let row = minRow; row <= maxRow; row++) {
@@ -293,18 +344,9 @@ const ExcelSpreadsheet = () => {
             textData.push(rowData.join('\t'));
           }
         } else {
-          // If no selection, copy all data
-          for (let row = 0; row < currentData.length; row++) {
-            const rowData = [];
-            for (let col = 0; col < currentData[row].length; col++) {
-              const cellValue = currentData[row][col]?.value || '';
-              const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
-                ? `"${cellValue.replace(/"/g, '""')}"` 
-                : cellValue;
-              rowData.push(escapedValue);
-            }
-            textData.push(rowData.join('\t'));
-          }
+          console.log('Ctrl+C - No cells selected - NOT copying anything');
+          // Don't copy anything if no selection
+          return;
         }
         
         const clipboardText = textData.join('\n');
@@ -327,6 +369,7 @@ const ExcelSpreadsheet = () => {
         setClipboardData(clipboardText);
         console.log('Selected data copied to clipboard');
         
+        // Visual feedback
         const copyButton = document.querySelector('#copy-all-btn');
         if (copyButton) {
           const originalText = copyButton.textContent;
@@ -350,7 +393,7 @@ const ExcelSpreadsheet = () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('paste', handlePasteEvent);
     };
-  }, [selectedCells]); // Include selectedCells to update copy functionality
+  }, [selectedCells, lastClickTarget]); // Include selectedCells and lastClickTarget to update copy functionality
 
   // Enhanced search functionality - filter and show only matching rows
   const handleSearch = useCallback(() => {
@@ -639,7 +682,30 @@ const ExcelSpreadsheet = () => {
       </div>
 
       {/* Spreadsheet Container */}
-      <div className="border-2 border-gray-300 rounded-lg overflow-auto shadow-lg bg-white" style={{ maxHeight: '65vh', minHeight: '500px' }}>
+      <div 
+        className="border-2 border-gray-300 rounded-lg overflow-auto shadow-lg bg-white" 
+        style={{ maxHeight: '65vh', minHeight: '500px' }}
+        onClick={(e) => {
+          // Track what was clicked to help determine selection type
+          const target = e.target;
+          if (target.tagName === 'TH') {
+            // Check if it's a row header or column header
+            const isRowHeader = target.textContent && /^\d+$/.test(target.textContent.trim());
+            const isColumnHeader = target.textContent && /^[A-Z]+$/.test(target.textContent.trim());
+            
+            if (isRowHeader) {
+              setLastClickTarget({ type: 'row', value: parseInt(target.textContent.trim()) - 1 });
+              console.log('Clicked on row header:', target.textContent);
+            } else if (isColumnHeader) {
+              setLastClickTarget({ type: 'column', value: target.textContent.trim() });
+              console.log('Clicked on column header:', target.textContent);
+            }
+          } else {
+            setLastClickTarget({ type: 'cell' });
+            console.log('Clicked on cell or other element');
+          }
+        }}
+      >
         <Spreadsheet
           ref={spreadsheetRef}
           data={isSearching && filteredData !== null ? filteredData : data}
@@ -649,7 +715,17 @@ const ExcelSpreadsheet = () => {
             Array.from(highlightedRows).sort((a, b) => a - b).map(row => (row + 1).toString()) : 
             rowLabels
           }
-          onSelect={setSelectedCells}
+          onSelect={(selection) => {
+            console.log('Selected cells:', selection);
+            console.log('Selection type check:', {
+              hasStart: selection?.start !== undefined,
+              hasEnd: selection?.end !== undefined,
+              hasRange: selection?.range !== undefined,
+              isArray: Array.isArray(selection),
+              keys: selection ? Object.keys(selection) : 'null'
+            });
+            setSelectedCells(selection);
+          }}
         />
       </div>
 
