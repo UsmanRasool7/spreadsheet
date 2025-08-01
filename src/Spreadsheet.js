@@ -26,14 +26,14 @@ const Spreadsheet = () => {
     companyWebsite: '',
     email: ''
   });
-  const [editingId, setEditingId] = useState(null);
-  const [editData, setEditData] = useState({});
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [bulkData, setBulkData] = useState('');
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [lastSelectedRow, setLastSelectedRow] = useState(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const [showCopyMessage, setShowCopyMessage] = useState(false);
+  const [selectedCell, setSelectedCell] = useState({ rowId: null, field: null });
+  const [cellValue, setCellValue] = useState('');
 
   // Filter data based on search term
   const filteredData = useMemo(() => {
@@ -63,23 +63,42 @@ const Spreadsheet = () => {
     }
   };
 
-  // Handle editing
-  const startEdit = (item) => {
-    setEditingId(item.id);
-    setEditData({ ...item });
+  // Handle cell selection and editing
+  const handleCellClick = (rowId, field, currentValue) => {
+    setSelectedCell({ rowId, field });
+    setCellValue(currentValue || '');
   };
 
-  const saveEdit = () => {
-    setData(data.map(item => 
-      item.id === editingId ? editData : item
-    ));
-    setEditingId(null);
-    setEditData({});
+  // Handle cell value change
+  const handleCellChange = (e) => {
+    setCellValue(e.target.value);
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditData({});
+  // Handle cell blur (save changes)
+  const handleCellBlur = () => {
+    if (selectedCell.rowId && selectedCell.field) {
+      setData(data.map(item => 
+        item.id === selectedCell.rowId 
+          ? { ...item, [selectedCell.field]: cellValue }
+          : item
+      ));
+    }
+    setSelectedCell({ rowId: null, field: null });
+    setCellValue('');
+  };
+
+  // Handle cell key press
+  const handleCellKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleCellBlur();
+    } else if (e.key === 'Escape') {
+      setSelectedCell({ rowId: null, field: null });
+      setCellValue('');
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (selectedCell.rowId && selectedCell.field) {
+        setCellValue('');
+      }
+    }
   };
 
   // Handle deleting entry
@@ -242,7 +261,7 @@ const Spreadsheet = () => {
         setLastSelectedRow(filteredData[0].id);
       }
     }
-    if (event.key === 'Delete' && selectedRows.size > 0) {
+    if (event.key === 'Delete' && selectedRows.size > 0 && !selectedCell.rowId) {
       event.preventDefault();
       handleDeleteSelected();
     }
@@ -250,6 +269,7 @@ const Spreadsheet = () => {
       event.preventDefault();
       setSelectedRows(new Set());
       setLastSelectedRow(null);
+      setSelectedCell({ rowId: null, field: null });
     }
   };
 
@@ -412,7 +432,7 @@ const Spreadsheet = () => {
 
       {/* Selection Help Text */}
       <div className="mb-4 text-xs text-gray-500">
-        💡 Tip: Click rows to select, Ctrl+Click for multiple selection, Shift+Click for range selection, Ctrl+C to copy, Delete key to delete selected, Ctrl+A to select all, Esc to clear
+        💡 Tip: Click cells to edit directly, Click rows to select, Ctrl+Click for multiple selection, Shift+Click for range selection, Ctrl+C to copy, Delete key to delete selected rows, Ctrl+A to select all, Esc to clear selection
       </div>
 
       {/* Spreadsheet Table */}
@@ -437,8 +457,7 @@ const Spreadsheet = () => {
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Person Name</th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">LinkedIn Profile</th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Company Website</th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">Email</th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -463,81 +482,98 @@ const Spreadsheet = () => {
                   />
                 </td>
                 <td className="px-6 py-4 border-r border-gray-200 align-top">
-                  {editingId === item.id ? (
+                  {selectedCell.rowId === item.id && selectedCell.field === 'personName' ? (
                     <input
                       type="text"
-                      value={editData.personName}
-                      onChange={(e) => setEditData({...editData, personName: e.target.value})}
-                      className="w-full px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                      value={cellValue}
+                      onChange={handleCellChange}
+                      onBlur={handleCellBlur}
+                      onKeyDown={handleCellKeyPress}
+                      className="w-full px-2 py-1 border-2 border-blue-500 rounded focus:outline-none bg-white"
+                      autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <div className="text-sm font-medium text-gray-900">{item.personName}</div>
+                    <div 
+                      className={`text-sm font-medium text-gray-900 px-2 py-1 cursor-text hover:bg-gray-50 ${selectedCell.rowId === item.id && selectedCell.field === 'personName' ? 'border-2 border-blue-500 rounded' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCellClick(item.id, 'personName', item.personName);
+                      }}
+                    >
+                      {item.personName}
+                    </div>
                   )}
                 </td>
                 <td className="px-6 py-4 border-r border-gray-200 align-top">
-                  {editingId === item.id ? (
+                  {selectedCell.rowId === item.id && selectedCell.field === 'linkedinUrl' ? (
                     <input
                       type="url"
-                      value={editData.linkedinUrl}
-                      onChange={(e) => setEditData({...editData, linkedinUrl: e.target.value})}
-                      className="w-full px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                      value={cellValue}
+                      onChange={handleCellChange}
+                      onBlur={handleCellBlur}
+                      onKeyDown={handleCellKeyPress}
+                      className="w-full px-2 py-1 border-2 border-blue-500 rounded focus:outline-none bg-white"
+                      autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <div className="text-sm text-gray-900 break-all max-w-xs">
+                    <div 
+                      className={`text-sm text-gray-900 break-all max-w-xs px-2 py-1 cursor-text hover:bg-gray-50 ${selectedCell.rowId === item.id && selectedCell.field === 'linkedinUrl' ? 'border-2 border-blue-500 rounded' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCellClick(item.id, 'linkedinUrl', item.linkedinUrl);
+                      }}
+                    >
                       {item.linkedinUrl || '-'}
                     </div>
                   )}
                 </td>
                 <td className="px-6 py-4 border-r border-gray-200 align-top">
-                  {editingId === item.id ? (
+                  {selectedCell.rowId === item.id && selectedCell.field === 'companyWebsite' ? (
                     <input
                       type="url"
-                      value={editData.companyWebsite}
-                      onChange={(e) => setEditData({...editData, companyWebsite: e.target.value})}
-                      className="w-full px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                      value={cellValue}
+                      onChange={handleCellChange}
+                      onBlur={handleCellBlur}
+                      onKeyDown={handleCellKeyPress}
+                      className="w-full px-2 py-1 border-2 border-blue-500 rounded focus:outline-none bg-white"
+                      autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <div className="text-sm text-gray-900 break-all max-w-xs">
+                    <div 
+                      className={`text-sm text-gray-900 break-all max-w-xs px-2 py-1 cursor-text hover:bg-gray-50 ${selectedCell.rowId === item.id && selectedCell.field === 'companyWebsite' ? 'border-2 border-blue-500 rounded' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCellClick(item.id, 'companyWebsite', item.companyWebsite);
+                      }}
+                    >
                       {item.companyWebsite || '-'}
                     </div>
                   )}
                 </td>
                 <td className="px-6 py-4 border-r border-gray-200 align-top">
-                  {editingId === item.id ? (
+                  {selectedCell.rowId === item.id && selectedCell.field === 'email' ? (
                     <input
                       type="email"
-                      value={editData.email}
-                      onChange={(e) => setEditData({...editData, email: e.target.value})}
-                      className="w-full px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                      value={cellValue}
+                      onChange={handleCellChange}
+                      onBlur={handleCellBlur}
+                      onKeyDown={handleCellKeyPress}
+                      className="w-full px-2 py-1 border-2 border-blue-500 rounded focus:outline-none bg-white"
+                      autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <div className="text-sm text-gray-900 break-all max-w-xs">
+                    <div 
+                      className={`text-sm text-gray-900 break-all max-w-xs px-2 py-1 cursor-text hover:bg-gray-50 ${selectedCell.rowId === item.id && selectedCell.field === 'email' ? 'border-2 border-blue-500 rounded' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCellClick(item.id, 'email', item.email);
+                      }}
+                    >
                       {item.email}
-                    </div>
-                  )}
-                </td>
-                <td className="px-6 py-4 text-sm font-medium align-top">
-                  {editingId === item.id ? (
-                    <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={saveEdit} className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200">
-                        Save
-                      </button>
-                      <button onClick={cancelEdit} className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200">
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => startEdit(item)} className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition-colors duration-200">
-                        Edit
-                      </button>
-                      <button onClick={() => handleDelete(item.id)} className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200">
-                        Delete
-                      </button>
                     </div>
                   )}
                 </td>
