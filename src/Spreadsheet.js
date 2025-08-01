@@ -17,6 +17,8 @@ const ExcelSpreadsheet = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [selectedCells, setSelectedCells] = useState([]);
   const [clipboardData, setClipboardData] = useState(null);
+  const [filteredData, setFilteredData] = useState(null);
+  const [highlightedRows, setHighlightedRows] = useState(new Set());
   
   // Use refs to store current values without causing re-renders
   const spreadsheetRef = useRef(null);
@@ -92,24 +94,45 @@ const ExcelSpreadsheet = () => {
     }
   }, []);
 
-  // Enhanced copy functionality - completely stable
-  const copySelectedData = useCallback(async (startRow = 0, startCol = 0, endRow = null, endCol = null) => {
+  // Enhanced copy functionality - works with selected cells
+  const copySelectedData = useCallback(async () => {
     try {
       const currentData = dataRef.current;
-      const actualEndRow = endRow || currentData.length - 1;
-      const actualEndCol = endCol || (currentData[0]?.length || 0) - 1;
+      let textData = [];
       
-      const textData = [];
-      for (let row = startRow; row <= actualEndRow; row++) {
-        const rowData = [];
-        for (let col = startCol; col <= actualEndCol; col++) {
-          const cellValue = currentData[row]?.[col]?.value || '';
-          const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
-            ? `"${cellValue.replace(/"/g, '""')}"` 
-            : cellValue;
-          rowData.push(escapedValue);
+      // If there are selected cells, copy only those
+      if (selectedCells && selectedCells.length > 0) {
+        // Find the bounding box of selected cells
+        const minRow = Math.min(...selectedCells.map(cell => cell.row));
+        const maxRow = Math.max(...selectedCells.map(cell => cell.row));
+        const minCol = Math.min(...selectedCells.map(cell => cell.col));
+        const maxCol = Math.max(...selectedCells.map(cell => cell.col));
+        
+        // Copy the rectangular region
+        for (let row = minRow; row <= maxRow; row++) {
+          const rowData = [];
+          for (let col = minCol; col <= maxCol; col++) {
+            const cellValue = currentData[row]?.[col]?.value || '';
+            const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
+              ? `"${cellValue.replace(/"/g, '""')}"` 
+              : cellValue;
+            rowData.push(escapedValue);
+          }
+          textData.push(rowData.join('\t'));
         }
-        textData.push(rowData.join('\t'));
+      } else {
+        // If no selection, copy all data
+        for (let row = 0; row < currentData.length; row++) {
+          const rowData = [];
+          for (let col = 0; col < currentData[row].length; col++) {
+            const cellValue = currentData[row][col]?.value || '';
+            const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
+              ? `"${cellValue.replace(/"/g, '""')}"` 
+              : cellValue;
+            rowData.push(escapedValue);
+          }
+          textData.push(rowData.join('\t'));
+        }
       }
       
       const clipboardText = textData.join('\n');
@@ -130,7 +153,7 @@ const ExcelSpreadsheet = () => {
       }
       
       setClipboardData(clipboardText);
-      console.log('Data copied to clipboard');
+      console.log('Selected data copied to clipboard');
       
       const copyButton = document.querySelector('#copy-all-btn');
       if (copyButton) {
@@ -146,7 +169,7 @@ const ExcelSpreadsheet = () => {
       console.error('Failed to copy data:', error);
       alert('Failed to copy data to clipboard. Please try selecting the data manually and using Ctrl+C.');
     }
-  }, []);
+  }, [selectedCells]);
 
   // Keyboard shortcuts - using refs to avoid re-renders
   useEffect(() => {
@@ -204,8 +227,15 @@ const ExcelSpreadsheet = () => {
           const currentData = dataRef.current;
           const newData = JSON.parse(JSON.stringify(currentData));
           
+          // Determine paste location based on selection
           let startRow = 0;
           let startCol = 0;
+          
+          if (selectedCells && selectedCells.length > 0) {
+            // Use the first selected cell as the paste location
+            startRow = selectedCells[0].row;
+            startCol = selectedCells[0].col;
+          }
 
           parsedData.forEach((row, rowIndex) => {
             const targetRowIndex = startRow + rowIndex;
@@ -236,22 +266,45 @@ const ExcelSpreadsheet = () => {
       }
     };
 
-    // Helper function to copy all data
+    // Helper function to copy selected data
     const copyAllDataToClipboard = async () => {
       try {
         const currentData = dataRef.current;
-        const textData = [];
+        let textData = [];
         
-        for (let row = 0; row < currentData.length; row++) {
-          const rowData = [];
-          for (let col = 0; col < currentData[row].length; col++) {
-            const cellValue = currentData[row][col]?.value || '';
-            const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
-              ? `"${cellValue.replace(/"/g, '""')}"` 
-              : cellValue;
-            rowData.push(escapedValue);
+        // If there are selected cells, copy only those
+        if (selectedCells && selectedCells.length > 0) {
+          // Find the bounding box of selected cells
+          const minRow = Math.min(...selectedCells.map(cell => cell.row));
+          const maxRow = Math.max(...selectedCells.map(cell => cell.row));
+          const minCol = Math.min(...selectedCells.map(cell => cell.col));
+          const maxCol = Math.max(...selectedCells.map(cell => cell.col));
+          
+          // Copy the rectangular region
+          for (let row = minRow; row <= maxRow; row++) {
+            const rowData = [];
+            for (let col = minCol; col <= maxCol; col++) {
+              const cellValue = currentData[row]?.[col]?.value || '';
+              const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
+                ? `"${cellValue.replace(/"/g, '""')}"` 
+                : cellValue;
+              rowData.push(escapedValue);
+            }
+            textData.push(rowData.join('\t'));
           }
-          textData.push(rowData.join('\t'));
+        } else {
+          // If no selection, copy all data
+          for (let row = 0; row < currentData.length; row++) {
+            const rowData = [];
+            for (let col = 0; col < currentData[row].length; col++) {
+              const cellValue = currentData[row][col]?.value || '';
+              const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
+                ? `"${cellValue.replace(/"/g, '""')}"` 
+                : cellValue;
+              rowData.push(escapedValue);
+            }
+            textData.push(rowData.join('\t'));
+          }
         }
         
         const clipboardText = textData.join('\n');
@@ -272,7 +325,7 @@ const ExcelSpreadsheet = () => {
         }
         
         setClipboardData(clipboardText);
-        console.log('Data copied to clipboard');
+        console.log('Selected data copied to clipboard');
         
         const copyButton = document.querySelector('#copy-all-btn');
         if (copyButton) {
@@ -297,13 +350,15 @@ const ExcelSpreadsheet = () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('paste', handlePasteEvent);
     };
-  }, []); // Empty dependency array is now safe because we use refs
+  }, [selectedCells]); // Include selectedCells to update copy functionality
 
-  // Enhanced search functionality - find all matching rows and cells
+  // Enhanced search functionality - filter and show only matching rows
   const handleSearch = useCallback(() => {
     if (!searchTerm.trim()) {
       setSearchResults([]);
       setIsSearching(false);
+      setFilteredData(null);
+      setHighlightedRows(new Set());
       return;
     }
 
@@ -312,12 +367,15 @@ const ExcelSpreadsheet = () => {
     const searchLower = searchTerm.toLowerCase();
     const currentData = dataRef.current;
     const rowsWithMatches = new Set();
+    const filteredRows = [];
 
-    // First pass: find all matching cells and track rows
+    // Find all matching cells and track rows
     currentData.forEach((row, rowIndex) => {
+      let hasMatch = false;
       row.forEach((cell, colIndex) => {
         const cellValue = cell.value?.toString() || '';
         if (cellValue.toLowerCase().includes(searchLower)) {
+          hasMatch = true;
           rowsWithMatches.add(rowIndex);
           results.push({
             row: rowIndex,
@@ -329,6 +387,11 @@ const ExcelSpreadsheet = () => {
           });
         }
       });
+      
+      // If this row has matches, include it in filtered data
+      if (hasMatch) {
+        filteredRows.push(row);
+      }
     });
 
     // Sort results by row first, then by column
@@ -338,6 +401,15 @@ const ExcelSpreadsheet = () => {
     });
 
     setSearchResults(results);
+    setHighlightedRows(rowsWithMatches);
+    
+    // Create filtered data showing only matching rows
+    if (filteredRows.length > 0) {
+      setFilteredData(filteredRows);
+    } else {
+      setFilteredData([]); // Empty array to show no results
+    }
+    
     console.log(`Search found ${results.length} matches in ${rowsWithMatches.size} rows`);
   }, [searchTerm, columnLabels]);
 
@@ -346,6 +418,8 @@ const ExcelSpreadsheet = () => {
     setSearchTerm('');
     setSearchResults([]);
     setIsSearching(false);
+    setFilteredData(null);
+    setHighlightedRows(new Set());
   }, []);
 
   // Add more rows
@@ -482,9 +556,9 @@ const ExcelSpreadsheet = () => {
               id="copy-all-btn"
               onClick={() => copySelectedData()}
               className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors duration-200 flex items-center gap-2"
-              title="Copy all data to clipboard (Ctrl+C)"
+              title="Copy selected data to clipboard (Ctrl+C)"
             >
-              📋 Copy All
+              📋 Copy Selected
             </button>
             <button
               onClick={exportToCSV}
@@ -522,19 +596,23 @@ const ExcelSpreadsheet = () => {
         {/* Search Results */}
         {isSearching && (
           <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h3 className="font-semibold mb-3 text-lg">
-              Search Results for "{searchTerm}" ({searchResults.length} found):
-            </h3>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-semibold text-lg">
+                Search Results for "{searchTerm}" ({searchResults.length} matches in {highlightedRows.size} rows)
+              </h3>
+              <button
+                onClick={clearSearch}
+                className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors duration-200"
+              >
+                Show All Rows
+              </button>
+            </div>
             {searchResults.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-40 overflow-y-auto">
-                {searchResults.map((result, index) => (
-                  <div key={index} className="text-sm p-3 bg-white rounded-lg border border-yellow-300 hover:bg-yellow-50 transition-colors duration-200">
-                    <div className="font-bold text-blue-600">{result.position}</div>
-                    <div className="text-gray-800 truncate" title={result.value}>
-                      {result.value}
-                    </div>
-                  </div>
-                ))}
+              <div className="text-sm text-gray-700">
+                <p className="mb-2">Showing only rows with matching data in the spreadsheet below.</p>
+                <p className="text-xs text-gray-500">
+                  Found matches in rows: {Array.from(highlightedRows).map(row => row + 1).sort((a, b) => a - b).join(', ')}
+                </p>
               </div>
             ) : (
               <p className="text-gray-600">No results found.</p>
@@ -564,10 +642,13 @@ const ExcelSpreadsheet = () => {
       <div className="border-2 border-gray-300 rounded-lg overflow-auto shadow-lg bg-white" style={{ maxHeight: '65vh', minHeight: '500px' }}>
         <Spreadsheet
           ref={spreadsheetRef}
-          data={data}
+          data={isSearching && filteredData !== null ? filteredData : data}
           onChange={handleDataChange}
           columnLabels={columnLabels}
-          rowLabels={rowLabels}
+          rowLabels={isSearching && filteredData !== null ? 
+            Array.from(highlightedRows).sort((a, b) => a - b).map(row => (row + 1).toString()) : 
+            rowLabels
+          }
           onSelect={setSelectedCells}
         />
       </div>
@@ -576,7 +657,10 @@ const ExcelSpreadsheet = () => {
       <div className="mt-4 text-sm text-gray-600 flex flex-wrap justify-between items-center p-3 bg-gray-50 rounded-lg border">
         <div className="flex flex-wrap gap-4">
           <span className="font-medium">
-            📊 Dimensions: {data.length} rows × {data[0]?.length || 0} columns
+            📊 Dimensions: {isSearching && filteredData !== null ? filteredData.length : data.length} rows × {data[0]?.length || 0} columns
+            {isSearching && filteredData !== null && (
+              <span className="text-orange-600 ml-2">(filtered view)</span>
+            )}
           </span>
           <span>
             🕒 History: {historyIndex + 1}/{history.length}
@@ -586,6 +670,9 @@ const ExcelSpreadsheet = () => {
           <span className="text-green-600 font-medium">✅ Excel Compatible</span>
           {clipboardData && (
             <span className="text-blue-600">📋 Data in clipboard</span>
+          )}
+          {selectedCells && selectedCells.length > 0 && (
+            <span className="text-purple-600">🎯 {selectedCells.length} cells selected</span>
           )}
         </div>
       </div>
