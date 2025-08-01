@@ -20,6 +20,8 @@ const ExcelSpreadsheet = () => {
   const [filteredData, setFilteredData] = useState(null);
   const [highlightedRows, setHighlightedRows] = useState(new Set());
   const [lastClickTarget, setLastClickTarget] = useState(null); // Track what was clicked
+  const [multiSelectedRows, setMultiSelectedRows] = useState(new Set()); // Track multiple selected rows
+  const [multiSelectedColumns, setMultiSelectedColumns] = useState(new Set()); // Track multiple selected columns
   
   // Use refs to store current values without causing re-renders
   const spreadsheetRef = useRef(null);
@@ -39,6 +41,40 @@ const ExcelSpreadsheet = () => {
   useEffect(() => {
     historyIndexRef.current = historyIndex;
   }, [historyIndex]);
+
+  // Apply visual styling for multi-selected rows and columns
+  useEffect(() => {
+    const applyMultiSelectionStyles = () => {
+      // Remove previous multi-selection styles
+      document.querySelectorAll('.multi-selected-row, .multi-selected-column').forEach(el => {
+        el.classList.remove('multi-selected-row', 'multi-selected-column');
+      });
+
+      // Apply row selection styles
+      multiSelectedRows.forEach(rowIndex => {
+        const rowElements = document.querySelectorAll(`tr:nth-child(${rowIndex + 2})`); // +2 because of header row
+        rowElements.forEach(row => {
+          row.classList.add('multi-selected-row');
+          row.style.backgroundColor = '#e3f2fd';
+          row.style.borderLeft = '4px solid #2196f3';
+        });
+      });
+
+      // Apply column selection styles
+      multiSelectedColumns.forEach(colIndex => {
+        const colElements = document.querySelectorAll(`td:nth-child(${colIndex + 2}), th:nth-child(${colIndex + 2})`); // +2 because of row header
+        colElements.forEach(col => {
+          col.classList.add('multi-selected-column');
+          col.style.backgroundColor = '#f3e5f5';
+          col.style.borderTop = '4px solid #9c27b0';
+        });
+      });
+    };
+
+    // Apply styles after a short delay to ensure DOM is updated
+    const timeoutId = setTimeout(applyMultiSelectionStyles, 100);
+    return () => clearTimeout(timeoutId);
+  }, [multiSelectedRows, multiSelectedColumns]);
 
   // Column labels (A, B, C, etc.) - Extended to support more columns
   const columnLabels = Array.from({ length: 15 }, (_, i) => {
@@ -95,7 +131,7 @@ const ExcelSpreadsheet = () => {
     }
   }, []);
 
-  // Enhanced copy functionality - works with selected cells
+  // Enhanced copy functionality - works with selected cells and multiple rows/columns
   const copySelectedData = useCallback(async () => {
     try {
       const currentData = dataRef.current;
@@ -103,9 +139,45 @@ const ExcelSpreadsheet = () => {
       
       console.log('Button copy - Selection state:', selectedCells);
       console.log('Button copy - Last click target:', lastClickTarget);
+      console.log('Button copy - Multi selected rows:', multiSelectedRows);
+      console.log('Button copy - Multi selected columns:', multiSelectedColumns);
       
+      // Check for multi-row selection first
+      if (multiSelectedRows.size > 0) {
+        const sortedRows = Array.from(multiSelectedRows).sort((a, b) => a - b);
+        console.log(`Button copy - Multiple rows selected: ${sortedRows.map(r => r + 1).join(', ')}`);
+        
+        sortedRows.forEach(rowIndex => {
+          const rowData = [];
+          for (let col = 0; col < (currentData[0]?.length || 15); col++) {
+            const cellValue = currentData[rowIndex]?.[col]?.value || '';
+            const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
+              ? `"${cellValue.replace(/"/g, '""')}"` 
+              : cellValue;
+            rowData.push(escapedValue);
+          }
+          textData.push(rowData.join('\t'));
+        });
+      }
+      // Check for multi-column selection
+      else if (multiSelectedColumns.size > 0) {
+        const sortedCols = Array.from(multiSelectedColumns).sort((a, b) => a - b);
+        console.log(`Button copy - Multiple columns selected: ${sortedCols.map(c => columnLabels[c]).join(', ')}`);
+        
+        for (let row = 0; row < currentData.length; row++) {
+          const rowData = [];
+          sortedCols.forEach(colIndex => {
+            const cellValue = currentData[row]?.[colIndex]?.value || '';
+            const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
+              ? `"${cellValue.replace(/"/g, '""')}"` 
+              : cellValue;
+            rowData.push(escapedValue);
+          });
+          textData.push(rowData.join('\t'));
+        }
+      }
       // If there are selected cells, copy only those
-      if (selectedCells && (selectedCells.length > 0 || (selectedCells.start !== undefined && selectedCells.end !== undefined))) {
+      else if (selectedCells && (selectedCells.length > 0 || (selectedCells.start !== undefined && selectedCells.end !== undefined))) {
         let minRow, maxRow, minCol, maxCol;
         
         // Handle different selection formats using click tracking
@@ -191,7 +263,7 @@ const ExcelSpreadsheet = () => {
       console.error('Failed to copy data:', error);
       alert('Failed to copy data to clipboard. Please try selecting the data manually and using Ctrl+C.');
     }
-  }, [selectedCells, lastClickTarget]);
+  }, [selectedCells, lastClickTarget, multiSelectedRows, multiSelectedColumns]);
 
   // Keyboard shortcuts - using refs to avoid re-renders
   useEffect(() => {
@@ -296,9 +368,45 @@ const ExcelSpreadsheet = () => {
         
         console.log('Selection state:', selectedCells);
         console.log('Ctrl+C - Last click target:', lastClickTarget);
+        console.log('Ctrl+C - Multi selected rows:', multiSelectedRows);
+        console.log('Ctrl+C - Multi selected columns:', multiSelectedColumns);
         
+        // Check for multi-row selection first
+        if (multiSelectedRows.size > 0) {
+          const sortedRows = Array.from(multiSelectedRows).sort((a, b) => a - b);
+          console.log(`Ctrl+C - Multiple rows selected: ${sortedRows.map(r => r + 1).join(', ')}`);
+          
+          sortedRows.forEach(rowIndex => {
+            const rowData = [];
+            for (let col = 0; col < (currentData[0]?.length || 15); col++) {
+              const cellValue = currentData[rowIndex]?.[col]?.value || '';
+              const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
+                ? `"${cellValue.replace(/"/g, '""')}"` 
+                : cellValue;
+              rowData.push(escapedValue);
+            }
+            textData.push(rowData.join('\t'));
+          });
+        }
+        // Check for multi-column selection
+        else if (multiSelectedColumns.size > 0) {
+          const sortedCols = Array.from(multiSelectedColumns).sort((a, b) => a - b);
+          console.log(`Ctrl+C - Multiple columns selected: ${sortedCols.map(c => columnLabels[c]).join(', ')}`);
+          
+          for (let row = 0; row < currentData.length; row++) {
+            const rowData = [];
+            sortedCols.forEach(colIndex => {
+              const cellValue = currentData[row]?.[colIndex]?.value || '';
+              const escapedValue = cellValue.includes(',') || cellValue.includes('"') 
+                ? `"${cellValue.replace(/"/g, '""')}"` 
+                : cellValue;
+              rowData.push(escapedValue);
+            });
+            textData.push(rowData.join('\t'));
+          }
+        }
         // If there are selected cells, copy only those
-        if (selectedCells && (selectedCells.length > 0 || (selectedCells.start !== undefined && selectedCells.end !== undefined))) {
+        else if (selectedCells && (selectedCells.length > 0 || (selectedCells.start !== undefined && selectedCells.end !== undefined))) {
           let minRow, maxRow, minCol, maxCol;
           
           // Handle different selection formats using click tracking
@@ -393,7 +501,7 @@ const ExcelSpreadsheet = () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('paste', handlePasteEvent);
     };
-  }, [selectedCells, lastClickTarget]); // Include selectedCells and lastClickTarget to update copy functionality
+  }, [selectedCells, lastClickTarget, multiSelectedRows, multiSelectedColumns]); // Include all selection states to update copy functionality
 
   // Enhanced search functionality - filter and show only matching rows
   const handleSearch = useCallback(() => {
@@ -540,6 +648,26 @@ const ExcelSpreadsheet = () => {
 
   return (
     <div className="p-4 max-w-full overflow-auto bg-white min-h-screen">
+      {/* Add styles for multi-selection highlighting */}
+      <style jsx>{`
+        .multi-selected-row {
+          background-color: #e3f2fd !important;
+          border-left: 4px solid #2196f3 !important;
+        }
+        .multi-selected-column {
+          background-color: #f3e5f5 !important;
+          border-top: 4px solid #9c27b0 !important;
+        }
+        .multi-selected-row th,
+        .multi-selected-row td {
+          background-color: #e3f2fd !important;
+        }
+        .multi-selected-column th,
+        .multi-selected-column td {
+          background-color: #f3e5f5 !important;
+        }
+      `}</style>
+      
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-4xl font-bold text-gray-800 mb-2">Excel-like Spreadsheet</h1>
@@ -634,6 +762,20 @@ const ExcelSpreadsheet = () => {
           >
             🗑️ Clear All
           </button>
+          
+          {/* Clear Selections */}
+          {(multiSelectedRows.size > 0 || multiSelectedColumns.size > 0) && (
+            <button
+              onClick={() => {
+                setMultiSelectedRows(new Set());
+                setMultiSelectedColumns(new Set());
+                console.log('Cleared all multi-selections');
+              }}
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors duration-200"
+            >
+              🚫 Clear Selections
+            </button>
+          )}
         </div>
 
         {/* Search Results */}
@@ -670,6 +812,7 @@ const ExcelSpreadsheet = () => {
             <ul className="list-disc list-inside space-y-1">
               <li>Use <kbd>Ctrl+Z</kbd> to undo, <kbd>Ctrl+Y</kbd> to redo</li>
               <li>Use <kbd>Ctrl+C</kbd> to copy, <kbd>Ctrl+V</kbd> to paste</li>
+              <li>Use <kbd>Ctrl+Click</kbd> on row/column headers for multi-selection</li>
               <li>Copy/paste directly from/to Excel seamlessly</li>
             </ul>
             <ul className="list-disc list-inside space-y-1">
@@ -679,6 +822,24 @@ const ExcelSpreadsheet = () => {
             </ul>
           </div>
         </div>
+        
+        {/* Debug Multi-Selection Status */}
+        {(multiSelectedRows.size > 0 || multiSelectedColumns.size > 0) && (
+          <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <p className="font-semibold text-purple-800 mb-2">🎯 Multi-Selection Active:</p>
+            {multiSelectedRows.size > 0 && (
+              <p className="text-sm text-purple-700">
+                Selected Rows: {Array.from(multiSelectedRows).map(r => r + 1).sort((a, b) => a - b).join(', ')}
+              </p>
+            )}
+            {multiSelectedColumns.size > 0 && (
+              <p className="text-sm text-purple-700">
+                Selected Columns: {Array.from(multiSelectedColumns).map(c => columnLabels[c]).sort().join(', ')}
+              </p>
+            )}
+            <p className="text-xs text-purple-600 mt-1">Hold Ctrl and click row/column headers to add more selections. Use Ctrl+C or the Copy button to copy.</p>
+          </div>
+        )}
       </div>
 
       {/* Spreadsheet Container */}
@@ -688,19 +849,82 @@ const ExcelSpreadsheet = () => {
         onClick={(e) => {
           // Track what was clicked to help determine selection type
           const target = e.target;
+          console.log('Click event:', { 
+            target: target.tagName, 
+            textContent: target.textContent, 
+            ctrlKey: e.ctrlKey,
+            metaKey: e.metaKey 
+          });
+          
           if (target.tagName === 'TH') {
             // Check if it's a row header or column header
             const isRowHeader = target.textContent && /^\d+$/.test(target.textContent.trim());
             const isColumnHeader = target.textContent && /^[A-Z]+$/.test(target.textContent.trim());
             
             if (isRowHeader) {
-              setLastClickTarget({ type: 'row', value: parseInt(target.textContent.trim()) - 1 });
-              console.log('Clicked on row header:', target.textContent);
+              e.preventDefault(); // Prevent default selection behavior
+              const rowIndex = parseInt(target.textContent.trim()) - 1;
+              
+              if (e.ctrlKey || e.metaKey) {
+                console.log('Ctrl+click on row', rowIndex + 1);
+                // Ctrl+click for multiple row selection
+                setMultiSelectedColumns(new Set()); // Clear column selections
+                setMultiSelectedRows(prev => {
+                  const newSet = new Set(prev);
+                  if (newSet.has(rowIndex)) {
+                    newSet.delete(rowIndex);
+                    console.log('Deselected row', rowIndex + 1);
+                  } else {
+                    newSet.add(rowIndex);
+                    console.log('Selected row', rowIndex + 1);
+                  }
+                  console.log('Multi-row selection updated:', Array.from(newSet).map(r => r + 1));
+                  return newSet;
+                });
+              } else {
+                console.log('Regular click on row', rowIndex + 1);
+                // Regular click - clear multi-selections and set single selection
+                setMultiSelectedRows(new Set());
+                setMultiSelectedColumns(new Set());
+              }
+              
+              setLastClickTarget({ type: 'row', value: rowIndex });
+              console.log('Clicked on row header:', target.textContent, e.ctrlKey ? '(with Ctrl)' : '');
             } else if (isColumnHeader) {
-              setLastClickTarget({ type: 'column', value: target.textContent.trim() });
-              console.log('Clicked on column header:', target.textContent);
+              e.preventDefault(); // Prevent default selection behavior
+              const columnValue = target.textContent.trim();
+              const colIndex = columnLabels.indexOf(columnValue);
+              
+              if (e.ctrlKey || e.metaKey) {
+                console.log('Ctrl+click on column', columnValue);
+                // Ctrl+click for multiple column selection
+                setMultiSelectedRows(new Set()); // Clear row selections
+                setMultiSelectedColumns(prev => {
+                  const newSet = new Set(prev);
+                  if (newSet.has(colIndex)) {
+                    newSet.delete(colIndex);
+                    console.log('Deselected column', columnValue);
+                  } else {
+                    newSet.add(colIndex);
+                    console.log('Selected column', columnValue);
+                  }
+                  console.log('Multi-column selection updated:', Array.from(newSet).map(c => columnLabels[c]));
+                  return newSet;
+                });
+              } else {
+                console.log('Regular click on column', columnValue);
+                // Regular click - clear multi-selections and set single selection
+                setMultiSelectedRows(new Set());
+                setMultiSelectedColumns(new Set());
+              }
+              
+              setLastClickTarget({ type: 'column', value: columnValue });
+              console.log('Clicked on column header:', target.textContent, e.ctrlKey ? '(with Ctrl)' : '');
             }
           } else {
+            // Clicked on cell or other element - clear multi-selections
+            setMultiSelectedRows(new Set());
+            setMultiSelectedColumns(new Set());
             setLastClickTarget({ type: 'cell' });
             console.log('Clicked on cell or other element');
           }
@@ -747,7 +971,13 @@ const ExcelSpreadsheet = () => {
           {clipboardData && (
             <span className="text-blue-600">📋 Data in clipboard</span>
           )}
-          {selectedCells && selectedCells.length > 0 && (
+          {multiSelectedRows.size > 0 && (
+            <span className="text-purple-600">🎯 {multiSelectedRows.size} rows selected</span>
+          )}
+          {multiSelectedColumns.size > 0 && (
+            <span className="text-purple-600">🎯 {multiSelectedColumns.size} columns selected</span>
+          )}
+          {selectedCells && selectedCells.length > 0 && multiSelectedRows.size === 0 && multiSelectedColumns.size === 0 && (
             <span className="text-purple-600">🎯 {selectedCells.length} cells selected</span>
           )}
         </div>
