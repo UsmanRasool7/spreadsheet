@@ -48,27 +48,34 @@ const ExcelSpreadsheet = () => {
       // Remove previous multi-selection styles
       document.querySelectorAll('.multi-selected-row, .multi-selected-column').forEach(el => {
         el.classList.remove('multi-selected-row', 'multi-selected-column');
+        el.style.backgroundColor = '';
+        el.style.borderLeft = '';
+        el.style.borderTop = '';
       });
 
-      // Apply row selection styles
-      multiSelectedRows.forEach(rowIndex => {
-        const rowElements = document.querySelectorAll(`tr:nth-child(${rowIndex + 2})`); // +2 because of header row
-        rowElements.forEach(row => {
-          row.classList.add('multi-selected-row');
-          row.style.backgroundColor = '#e3f2fd';
-          row.style.borderLeft = '4px solid #2196f3';
+      // Apply row selection styles only if there are selected rows
+      if (multiSelectedRows.size > 0) {
+        multiSelectedRows.forEach(rowIndex => {
+          const rowElements = document.querySelectorAll(`tr:nth-child(${rowIndex + 2})`); // +2 because of header row
+          rowElements.forEach(row => {
+            row.classList.add('multi-selected-row');
+            row.style.backgroundColor = '#e3f2fd';
+            row.style.borderLeft = '4px solid #2196f3';
+          });
         });
-      });
+      }
 
-      // Apply column selection styles
-      multiSelectedColumns.forEach(colIndex => {
-        const colElements = document.querySelectorAll(`td:nth-child(${colIndex + 2}), th:nth-child(${colIndex + 2})`); // +2 because of row header
-        colElements.forEach(col => {
-          col.classList.add('multi-selected-column');
-          col.style.backgroundColor = '#f3e5f5';
-          col.style.borderTop = '4px solid #9c27b0';
+      // Apply column selection styles only if there are selected columns
+      if (multiSelectedColumns.size > 0) {
+        multiSelectedColumns.forEach(colIndex => {
+          const colElements = document.querySelectorAll(`td:nth-child(${colIndex + 2}), th:nth-child(${colIndex + 2})`); // +2 because of row header
+          colElements.forEach(col => {
+            col.classList.add('multi-selected-column');
+            col.style.backgroundColor = '#e3f2fd';
+            col.style.borderLeft = '4px solid #2196f3';
+          });
         });
-      });
+      }
     };
 
     // Apply styles after a short delay to ensure DOM is updated
@@ -248,6 +255,10 @@ const ExcelSpreadsheet = () => {
       
       setClipboardData(clipboardText);
       console.log('Button copy - Selected data copied to clipboard');
+      
+      // Clear visual selections after copying
+      setMultiSelectedRows(new Set());
+      setMultiSelectedColumns(new Set());
       
       const copyButton = document.querySelector('#copy-all-btn');
       if (copyButton) {
@@ -477,6 +488,10 @@ const ExcelSpreadsheet = () => {
         setClipboardData(clipboardText);
         console.log('Selected data copied to clipboard');
         
+        // Clear visual selections after copying
+        setMultiSelectedRows(new Set());
+        setMultiSelectedColumns(new Set());
+        
         // Visual feedback
         const copyButton = document.querySelector('#copy-all-btn');
         if (copyButton) {
@@ -655,8 +670,8 @@ const ExcelSpreadsheet = () => {
           border-left: 4px solid #2196f3 !important;
         }
         .multi-selected-column {
-          background-color: #f3e5f5 !important;
-          border-top: 4px solid #9c27b0 !important;
+          background-color: #e3f2fd !important;
+          border-left: 4px solid #2196f3 !important;
         }
         .multi-selected-row th,
         .multi-selected-row td {
@@ -664,7 +679,7 @@ const ExcelSpreadsheet = () => {
         }
         .multi-selected-column th,
         .multi-selected-column td {
-          background-color: #f3e5f5 !important;
+          background-color: #e3f2fd !important;
         }
       `}</style>
       
@@ -822,24 +837,6 @@ const ExcelSpreadsheet = () => {
             </ul>
           </div>
         </div>
-        
-        {/* Debug Multi-Selection Status */}
-        {(multiSelectedRows.size > 0 || multiSelectedColumns.size > 0) && (
-          <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-            <p className="font-semibold text-purple-800 mb-2">🎯 Multi-Selection Active:</p>
-            {multiSelectedRows.size > 0 && (
-              <p className="text-sm text-purple-700">
-                Selected Rows: {Array.from(multiSelectedRows).map(r => r + 1).sort((a, b) => a - b).join(', ')}
-              </p>
-            )}
-            {multiSelectedColumns.size > 0 && (
-              <p className="text-sm text-purple-700">
-                Selected Columns: {Array.from(multiSelectedColumns).map(c => columnLabels[c]).sort().join(', ')}
-              </p>
-            )}
-            <p className="text-xs text-purple-600 mt-1">Hold Ctrl and click row/column headers to add more selections. Use Ctrl+C or the Copy button to copy.</p>
-          </div>
-        )}
       </div>
 
       {/* Spreadsheet Container */}
@@ -869,18 +866,38 @@ const ExcelSpreadsheet = () => {
                 console.log('Ctrl+click on row', rowIndex + 1);
                 // Ctrl+click for multiple row selection
                 setMultiSelectedColumns(new Set()); // Clear column selections
-                setMultiSelectedRows(prev => {
-                  const newSet = new Set(prev);
-                  if (newSet.has(rowIndex)) {
-                    newSet.delete(rowIndex);
-                    console.log('Deselected row', rowIndex + 1);
-                  } else {
-                    newSet.add(rowIndex);
-                    console.log('Selected row', rowIndex + 1);
-                  }
-                  console.log('Multi-row selection updated:', Array.from(newSet).map(r => r + 1));
-                  return newSet;
-                });
+                
+                // If we currently have a single row selected (not multi), add it to multi-selection first
+                if (multiSelectedRows.size === 0 && lastClickTarget?.type === 'row' && 
+                    selectedCells && selectedCells.start !== undefined && selectedCells.end !== undefined) {
+                  const currentSingleRow = Math.min(selectedCells.start, selectedCells.end);
+                  setMultiSelectedRows(prev => {
+                    const newSet = new Set([currentSingleRow]); // Start with currently selected row
+                    if (newSet.has(rowIndex)) {
+                      newSet.delete(rowIndex);
+                      console.log('Deselected row', rowIndex + 1);
+                    } else {
+                      newSet.add(rowIndex);
+                      console.log('Selected row', rowIndex + 1);
+                    }
+                    console.log('Multi-row selection updated:', Array.from(newSet).map(r => r + 1));
+                    return newSet;
+                  });
+                } else {
+                  // Normal multi-selection toggle
+                  setMultiSelectedRows(prev => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(rowIndex)) {
+                      newSet.delete(rowIndex);
+                      console.log('Deselected row', rowIndex + 1);
+                    } else {
+                      newSet.add(rowIndex);
+                      console.log('Selected row', rowIndex + 1);
+                    }
+                    console.log('Multi-row selection updated:', Array.from(newSet).map(r => r + 1));
+                    return newSet;
+                  });
+                }
               } else {
                 console.log('Regular click on row', rowIndex + 1);
                 // Regular click - clear multi-selections and set single selection
@@ -899,18 +916,38 @@ const ExcelSpreadsheet = () => {
                 console.log('Ctrl+click on column', columnValue);
                 // Ctrl+click for multiple column selection
                 setMultiSelectedRows(new Set()); // Clear row selections
-                setMultiSelectedColumns(prev => {
-                  const newSet = new Set(prev);
-                  if (newSet.has(colIndex)) {
-                    newSet.delete(colIndex);
-                    console.log('Deselected column', columnValue);
-                  } else {
-                    newSet.add(colIndex);
-                    console.log('Selected column', columnValue);
-                  }
-                  console.log('Multi-column selection updated:', Array.from(newSet).map(c => columnLabels[c]));
-                  return newSet;
-                });
+                
+                // If we currently have a single column selected (not multi), add it to multi-selection first
+                if (multiSelectedColumns.size === 0 && lastClickTarget?.type === 'column' && 
+                    selectedCells && selectedCells.start !== undefined && selectedCells.end !== undefined) {
+                  const currentSingleColIndex = columnLabels.indexOf(lastClickTarget.value);
+                  setMultiSelectedColumns(prev => {
+                    const newSet = new Set([currentSingleColIndex]); // Start with currently selected column
+                    if (newSet.has(colIndex)) {
+                      newSet.delete(colIndex);
+                      console.log('Deselected column', columnValue);
+                    } else {
+                      newSet.add(colIndex);
+                      console.log('Selected column', columnValue);
+                    }
+                    console.log('Multi-column selection updated:', Array.from(newSet).map(c => columnLabels[c]));
+                    return newSet;
+                  });
+                } else {
+                  // Normal multi-selection toggle
+                  setMultiSelectedColumns(prev => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(colIndex)) {
+                      newSet.delete(colIndex);
+                      console.log('Deselected column', columnValue);
+                    } else {
+                      newSet.add(colIndex);
+                      console.log('Selected column', columnValue);
+                    }
+                    console.log('Multi-column selection updated:', Array.from(newSet).map(c => columnLabels[c]));
+                    return newSet;
+                  });
+                }
               } else {
                 console.log('Regular click on column', columnValue);
                 // Regular click - clear multi-selections and set single selection
@@ -972,10 +1009,10 @@ const ExcelSpreadsheet = () => {
             <span className="text-blue-600">📋 Data in clipboard</span>
           )}
           {multiSelectedRows.size > 0 && (
-            <span className="text-purple-600">🎯 {multiSelectedRows.size} rows selected</span>
+            <span className="text-blue-600">🎯 {multiSelectedRows.size} rows selected</span>
           )}
           {multiSelectedColumns.size > 0 && (
-            <span className="text-purple-600">🎯 {multiSelectedColumns.size} columns selected</span>
+            <span className="text-blue-600">🎯 {multiSelectedColumns.size} columns selected</span>
           )}
           {selectedCells && selectedCells.length > 0 && multiSelectedRows.size === 0 && multiSelectedColumns.size === 0 && (
             <span className="text-purple-600">🎯 {selectedCells.length} cells selected</span>
