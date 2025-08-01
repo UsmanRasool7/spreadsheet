@@ -1,11 +1,11 @@
 import React from 'react';
 import './App.css';
-import Spreadsheet from './Spreadsheet';
+import ExcelSpreadsheet from './Spreadsheet';
 
 function App() {
   return (
     <div className="App">
-      <Spreadsheet />
+      <ExcelSpreadsheet />
     </div>
   );
 }
