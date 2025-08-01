@@ -685,8 +685,8 @@ const ExcelSpreadsheet = () => {
       
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-4xl font-bold text-gray-800 mb-2">Excel-like Spreadsheet</h1>
-        <p className="text-gray-600 mb-4">Full Excel compatibility with copy/paste, undo/redo, and search</p>
+        <h1 className="text-4xl font-bold text-gray-800 mb-2">Spreadsheet</h1>
+        
         
         {/* Control Panel */}
         <div className="flex flex-wrap gap-3 mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
